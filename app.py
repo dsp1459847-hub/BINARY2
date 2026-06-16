@@ -9,7 +9,7 @@ st.set_page_config(page_title="MAYA AI - Matrix v2.0", layout="centered")
 st.title("📊 MAYA AI - मोबाइल बाइनरी बूस्टर v2.0")
 st.write("मोबाइल से एक्सेल शीट अपलोड करें और आज की प्रेडिक्शन निकालें।")
 
-# 1. डेटा को प्रोसेस करके 60 बाइनरी कॉलम्स (Matrix) बनाने का फंक्शन
+# 1. डेटा को प्रोसेस करके 60 बाइनरी कॉलम्स (Matrix) बनाने का फंक्शन (एरर-फ्री वर्जन)
 def process_binary_matrix(df):
     shifts = ['DS', 'FD', 'GD', 'GL', 'DB', 'SG']
     df = df.dropna(subset=['DATE']).reset_index(drop=True)
@@ -22,20 +22,21 @@ def process_binary_matrix(df):
             # XX या खाली सेल को हटाकर केवल नंबर्स को प्रोसेस करना
             s_data = pd.to_numeric(df[shift].replace('XX', np.nan), errors='coerce')
             
+            # .astype(object) का उपयोग किया ताकि XX, 1 और 0 एक साथ रहने पर NumPy क्रैश न हो
             # 5 हॉरिजॉन्टल पार्ट्स (1-20, 21-40, 41-60, 61-80, 81-99/0)
-            h_data[f'{shift}_H1'] = np.where((s_data >= 1) & (s_data <= 20), 1, np.where(s_data.isna(), "XX", 0))
-            h_data[f'{shift}_H2'] = np.where((s_data >= 21) & (s_data <= 40), 1, np.where(s_data.isna(), "XX", 0))
-            h_data[f'{shift}_H3'] = np.where((s_data >= 41) & (s_data <= 60), 1, np.where(s_data.isna(), "XX", 0))
-            h_data[f'{shift}_H4'] = np.where((s_data >= 61) & (s_data <= 80), 1, np.where(s_data.isna(), "XX", 0))
-            h_data[f'{shift}_H5'] = np.where(((s_data >= 81) & (s_data <= 99)) | (s_data == 0), 1, np.where(s_data.isna(), "XX", 0))
+            h_data[f'{shift}_H1'] = np.where((s_data >= 1) & (s_data <= 20), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            h_data[f'{shift}_H2'] = np.where((s_data >= 21) & (s_data <= 40), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            h_data[f'{shift}_H3'] = np.where((s_data >= 41) & (s_data <= 60), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            h_data[f'{shift}_H4'] = np.where((s_data >= 61) & (s_data <= 80), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            h_data[f'{shift}_H5'] = np.where(((s_data >= 81) & (s_data <= 99)) | (s_data == 0), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
             
-            # 5 वर्टical पार्ट्स (आखिरी अंक 1-2, 3-4, 5-6, 7-8, 9-0)
+            # 5 वर्टिकल पार्ट्स (आखिरी अंक 1-2, 3-4, 5-6, 7-8, 9-0)
             last_digit = s_data % 10
-            v_data[f'{shift}_V1'] = np.where((last_digit == 1) | (last_digit == 2), 1, np.where(s_data.isna(), "XX", 0))
-            v_data[f'{shift}_V2'] = np.where((last_digit == 3) | (last_digit == 4), 1, np.where(s_data.isna(), "XX", 0))
-            v_data[f'{shift}_V3'] = np.where((last_digit == 5) | (last_digit == 6), 1, np.where(s_data.isna(), "XX", 0))
-            v_data[f'{shift}_V4'] = np.where((last_digit == 7) | (last_digit == 8), 1, np.where(s_data.isna(), "XX", 0))
-            v_data[f'{shift}_V5'] = np.where((last_digit == 9) | (last_digit == 0), 1, np.where(s_data.isna(), "XX", 0))
+            v_data[f'{shift}_V1'] = np.where((last_digit == 1) | (last_digit == 2), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            v_data[f'{shift}_V2'] = np.where((last_digit == 3) | (last_digit == 4), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            v_data[f'{shift}_V3'] = np.where((last_digit == 5) | (last_digit == 6), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            v_data[f'{shift}_V4'] = np.where((last_digit == 7) | (last_digit == 8), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
+            v_data[f'{shift}_V5'] = np.where((last_digit == 9) | (last_digit == 0), "1", np.where(s_data.isna(), "XX", "0")).astype(object)
             
     h_df = pd.DataFrame(h_data)
     v_df = pd.DataFrame(v_data)
@@ -50,7 +51,7 @@ def analyze_and_predict(matrix_df, pattern_cols):
     dead_patterns = {}
     
     for col in pattern_cols:
-        # केवल वैलिड 0 और 1 डेटा को उठाना, XX को छोड़ देना
+        # केवल वैलिड 0 और 1 डेटा को उठाना, XX को छोड़ देना (यहाँ स्ट्रिंग और नंबर दोनों को सेफली चेक किया है)
         valid_rows = matrix_df[matrix_df[col].isin([0, 1, '0', '1', 0.0, 1.0])]
         col_data = valid_rows[col].astype(int).tolist()
         
@@ -122,7 +123,12 @@ def generate_final_numbers(predictions):
     return sorted(list(final_prediction)), sorted(list(removed_numbers))
 
 # मोबाइल अपलोडर इंटरफेस
-uploaded_file = st.file_uploader("अपनी एक्सेल शीट (.xlsx या .csv) अपलोड करें", type=["csv", "xlsx"])
+st.subheader("📁 डेटा इनपुट (Data Input)")
+uploaded_file = st.file_uploader(
+    "अपनी एक्सेल शीट (.xlsx या .csv) अपलोड करें", 
+    type=["csv", "xlsx"],
+    key="maya_file_uploader_v2"
+)
 
 if uploaded_file is not None:
     try:
