@@ -3,13 +3,13 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 
-# मोबाइल व्यू के लिए लेआउट सेट करना
-st.set_page_config(page_title="MAYA AI - Adaptive Booster v4.0", layout="centered")
+# मोबाइल और बड़ी स्क्रीन दोनों के लिए लेआउट सेट करना
+st.set_page_config(page_title="MAYA AI - Self Learning Matrix v5.0", layout="wide")
 
-st.title("👑 MAYA AI - एडेप्टिव लर्निंग बूस्टर v4.0")
-st.write("पिछली गलतियों से सीखकर और बेस-शिफ्ट ट्रांजिशन थ्योरी के आधार पर सटीक अंकों की खोज।")
+st.title("👑 MAYA AI - ऑटो-बैकटेस्टिंग और मल्टी-शिफ्ट बूस्टर v5.0")
+st.write("यह इंजन पहले पिछले 90 दिनों के लाखों पैटर्न्स का बैकटेस्ट करता है और सिर्फ 80% से ऊपर वाले सफल पैटर्न्स से आज की प्रेडिक्शन निकालता है।")
 
-# 1. 60-कॉलम बाइनरी मैट्रिक्स जनरेशन (ऑब्जेक्ट टाइप सुरक्षित)
+# 1. 60-कॉलम बाइनरी मैट्रिक्स जनरेशन (सुरक्षित डेटा टाइप)
 def process_binary_matrix(df):
     shifts = ['DS', 'FD', 'GD', 'GL', 'DB', 'SG']
     df = df.dropna(subset=['DATE']).reset_index(drop=True)
@@ -21,14 +21,14 @@ def process_binary_matrix(df):
         if shift in df.columns:
             s_data = pd.to_numeric(df[shift].replace('XX', np.nan), errors='coerce')
             
-            # हॉरिजॉन्टल पार्ट्स
+            # 5 हॉरिजॉन्टल पार्ट्स
             h_data[f'{shift}_H1'] = np.where((s_data >= 1) & (s_data <= 20), 1, np.where(s_data.isna(), -1, 0))
             h_data[f'{shift}_H2'] = np.where((s_data >= 21) & (s_data <= 40), 1, np.where(s_data.isna(), -1, 0))
             h_data[f'{shift}_H3'] = np.where((s_data >= 41) & (s_data <= 60), 1, np.where(s_data.isna(), -1, 0))
             h_data[f'{shift}_H4'] = np.where((s_data >= 61) & (s_data <= 80), 1, np.where(s_data.isna(), -1, 0))
             h_data[f'{shift}_H5'] = np.where(((s_data >= 81) & (s_data <= 99)) | (s_data == 0), 1, np.where(s_data.isna(), -1, 0))
             
-            # वर्टिकल पार्ट्स (आखिरी अंक)
+            # 5 वर्टिकल पार्ट्स (आखिरी अंक)
             last_digit = s_data % 10
             v_data[f'{shift}_V1'] = np.where((last_digit == 1) | (last_digit == 2), 1, np.where(s_data.isna(), -1, 0))
             v_data[f'{shift}_V2'] = np.where((last_digit == 3) | (last_digit == 4), 1, np.where(s_data.isna(), -1, 0))
@@ -42,128 +42,151 @@ def process_binary_matrix(df):
     full_matrix = pd.concat([df[['S. NUMBER ', 'DATE'] + [s for s in shifts if s in df.columns]], h_df, v_df], axis=1)
     return full_matrix, list(h_df.columns) + list(v_df.columns)
 
-# 2. एडेप्टिव लर्निंग इंजन - ट्रांजिशन मैट्रिक्स थ्योरी
-def adaptive_learning_prediction(matrix_df, pattern_cols):
-    # -1 (XX/छुट्टी) वाली रोज़ को हटाकर शुद्ध संख्यात्मक डेटा तैयार करना
-    numeric_df = matrix_df.copy()
-    for col in pattern_cols:
-        numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
-    
-    # अंतिम रो (कल का लाइव डेटा)
-    total_rows = len(numeric_df)
-    if total_rows < 15:
-        return {c: 0.5 for c in pattern_cols}, {}, {}
+# 2. मास्टर डीप बैकटेस्टिंग इंजन (कल, परसों, तरसों, और डबल-शिफ्ट कॉम्बिनेशन चेकर)
+def deep_historical_backtest(matrix_df, pattern_cols):
+    total_rows = len(matrix_df)
+    if total_rows < 30:
+        return {}, [], []
         
-    last_day_signals = numeric_df.loc[total_rows - 1, pattern_cols].to_dict()
+    # पिछले 90 दिनों या रिकॉर्ड्स तक का बैकटेस्ट सीमित रखना
+    lookback_limit = min(90, total_rows - 5)
+    start_idx = total_rows - lookback_limit
     
-    # हर पैटर्न का एक दूसरे के साथ ट्रांजिशन स्कोर (Probability Weights)
-    transition_weights = defaultdict(lambda: {'count_1': 0, 'total': 0})
+    successful_patterns = []
+    failed_patterns_count = 0
     
-    # बैकटेस्टिंग और लर्निंग लूप: इतिहास में जाकर हर एक पैटर्न के बाद दूसरे पैटर्न के आने का लिंक ढूंढना
-    for i in range(total_rows - 2):
-        for col_past in pattern_cols:
-            val_past = numeric_df.loc[i, col_past]
-            if val_past == -1: continue # छुट्टी को छोड़ दें
-            
-            # अगर कल यह पैटर्न एक्टिव (1) या इनएक्टिव (0) था
-            for col_future in pattern_cols:
-                val_future = numeric_df.loc[i + 1, col_future]
-                if val_future == -1: continue
-                
-                key = (col_past, val_past, col_future)
-                transition_weights[key]['total'] += 1
-                if val_future == 1:
-                    transition_weights[key]['count_1'] += 1
-
-    # आज के लिए अंतिम स्कोर की गणना (फर्जी 100% दावों से मुक्त, रियल प्रोबेबिलिटी)
-    final_pattern_scores = {}
-    strong_signals = {}
-    dead_signals = {}
+    # प्रत्येक टारगेट पैटर्न के लिए बैकटेस्ट स्कोर स्टोर करना
+    pattern_accuracy_registry = {}
+    
+    # अंतिम लाइव स्थिति (कल का डेटा)
+    last_row = matrix_df.iloc[total_rows - 1]
+    last_2_row = matrix_df.iloc[total_rows - 2] # परसों
+    last_3_row = matrix_df.iloc[total_rows - 3] # तरसों
     
     for target_col in pattern_cols:
-        score_sum = 0
-        valid_factors = 0
+        best_accuracy = 0.0
+        best_prediction_value = -1
+        best_logic_name = ""
         
+        # प्रोबेबिलिटी टाइप 1: कल (t-1) का सिंगल कॉलम रिलेशिनशिप
         for col_past in pattern_cols:
-            val_past = last_day_signals.get(col_past, -1)
-            if val_past == -1: continue
+            yesterday_val = last_row[col_past]
+            if yesterday_val == -1: continue
             
-            key = (col_past, val_past, target_col)
-            stats = transition_weights.get(key, {'count_1': 0, 'total': 0})
+            # इतिहास में इस नियम का बैकटेस्ट करना
+            match_1 = 0
+            total_1 = 0
+            for idx in range(start_idx, total_rows - 1):
+                if matrix_df.loc[idx, col_past] == yesterday_val:
+                    actual_next = matrix_df.loc[idx + 1, target_col]
+                    if actual_next != -1:
+                        total_1 += 1
+                        if actual_next == 1: match_1 += 1
             
-            if stats['total'] >= 5: # न्यूनतम 5 बार इतिहास में आना जरूरी है (Overfitting से बचाव)
-                prob = stats['count_1'] / stats['total']
-                score_sum += prob
-                valid_factors += 1
+            if total_1 >= 8: # न्यूनतम 8 बार आना ज़रूरी है
+                rate_1 = match_1 / total_1
+                rate_0 = (total_1 - match_1) / total_1
                 
-        # एवरेज प्रोबेबिलिटी स्कोर निकालना
-        if valid_factors > 0:
-            final_score = score_sum / valid_factors
-        else:
-            final_score = 0.5
-            
-        final_pattern_scores[target_col] = final_score
-        
-        # केवल वास्तविक मजबूत और कमजोर पैटर्न्स को अलग करना (फर्जी 100% को रोककर व्यावहारिक रेंज)
-        if final_score >= 0.68:
-            strong_signals[target_col] = f"ट्रेंड स्कोर: {final_score*100:.1f}% (आने की मजबूत संभावना)"
-        elif final_score <= 0.32:
-            dead_signals[target_col] = f"ट्रेंड स्कोर: {final_score*100:.1f}% (ब्लॉक होने की मजबूत संभावना)"
-            
-    return final_pattern_scores, strong_signals, dead_signals
+                if rate_1 >= 0.80 and rate_1 > best_accuracy:
+                    best_accuracy, best_prediction_value, best_logic_name = rate_1, 1, f"कल के {col_past} से लिंक"
+                if rate_0 >= 0.80 and rate_0 > best_accuracy:
+                    best_accuracy, best_prediction_value, best_logic_name = rate_0, 0, f"कल के {col_past} से लिंक"
 
-# 3. नंबर डेंसिटी बूस्टर - अंकों का फाइनल फिल्टर
-def generate_adaptive_numbers(pattern_scores):
-    number_confidence = {}
+        # प्रोबेबिलिटी टाइप 2: परसों (t-2) या तरसों (t-3) का लॉन्ग गैप लिंक
+        if best_accuracy < 0.80:
+            for col_past in pattern_cols:
+                p_val = last_2_row[col_past] # परसों
+                if p_val == -1: continue
+                match_2 = 0
+                total_2 = 0
+                for idx in range(start_idx, total_rows - 2):
+                    if matrix_df.loc[idx, col_past] == p_val:
+                        actual_next = matrix_df.loc[idx + 2, target_col]
+                        if actual_next != -1:
+                            total_2 += 1
+                            if actual_next == 1: match_2 += 1
+                            
+                if total_2 >= 8:
+                    rate_1 = match_2 / total_2
+                    rate_0 = (total_2 - match_2) / total_2
+                    if rate_1 >= 0.80 and rate_1 > best_accuracy:
+                        best_accuracy, best_prediction_value, best_logic_name = rate_1, 1, f"परसों के {col_past} से लिंक"
+                    if rate_0 >= 0.80 and rate_0 > best_accuracy:
+                        best_accuracy, best_prediction_value, best_logic_name = rate_0, 0, f"परसों के {col_past} से लिंक"
+
+        # प्रोबेबिलिटी टाइप 3: डबल शिफ्ट जॉइंट रिलेशन (दो पैटर्न्स का एक साथ आना)
+        if best_accuracy < 0.80:
+            # टॉप 5 सबसे महत्वपूर्ण जोड़ियों को चेक करना ताकि मोबाइल पर स्पीड बनी रहे
+            for i in range(len(pattern_cols) - 1):
+                colA = pattern_cols[i]
+                colB = pattern_cols[i+1]
+                valA, valB = last_row[colA], last_row[colB]
+                if valA == -1 or valB == -1: continue
+                
+                match_double = 0
+                total_double = 0
+                for idx in range(start_idx, total_rows - 1):
+                    if matrix_df.loc[idx, colA] == valA and matrix_df.loc[idx, colB] == valB:
+                        actual_next = matrix_df.loc[idx + 1, target_col]
+                        if actual_next != -1:
+                            total_double += 1
+                            if actual_next == 1: match_double += 1
+                            
+                if total_double >= 5:
+                    rate_1 = match_double / total_double
+                    rate_0 = (total_double - match_double) / total_double
+                    if rate_1 >= 0.80 and rate_1 > best_accuracy:
+                        best_accuracy, best_prediction_value, best_logic_name = rate_1, 1, f"डबल लिंक ({colA} + {colB})"
+                    if rate_0 >= 0.80 and rate_0 > best_accuracy:
+                        best_accuracy, best_prediction_value, best_logic_name = rate_0, 0, f"डबल लिंक ({colA} + {colB})"
+
+        # अगर कोई भी नियम 80% या 90% बैकटेस्ट पास कर गया, तो ही रजिस्टर करें
+        if best_accuracy >= 0.80:
+            pattern_accuracy_registry[target_col] = {
+                'prediction': best_prediction_value,
+                'accuracy': best_accuracy,
+                'logic': best_logic_name
+            }
+            successful_patterns.append(f"✅ **{target_col}**: {best_logic_name} | बैकटेस्ट सटीकता: {best_accuracy*100:.1f}% -> आउटपुट: **{best_prediction_value}**")
+        else:
+            pattern_accuracy_registry[target_col] = {'prediction': -1, 'accuracy': 0, 'logic': "फेल"}
+            failed_patterns_count += 1
+            
+    return pattern_accuracy_registry, successful_patterns, failed_patterns_count
+
+# 3. बैकटेस्टेड नंबर फ़िल्टरिंग
+def generate_backtested_numbers(registry_scores):
+    allowed_numbers = set(range(0, 100))
+    removed_numbers = set()
     shifts = ['DS', 'FD', 'GD', 'GL', 'DB', 'SG']
     
-    for n in range(0, 100):
-        # हर नंबर को 0 से शुरू करके उसकी पास होने की क्षमता का स्कोर देना
-        confidence = 100.0
-        rem = n % 10
-        
-        for shift in shifts:
-            # हॉरिजॉन्тель चेक
-            h1_s = pattern_scores.get(f'{shift}_H1', 0.5)
-            h2_s = pattern_scores.get(f'{shift}_H2', 0.5)
-            h3_s = pattern_scores.get(f'{shift}_H3', 0.5)
-            h4_s = pattern_scores.get(f'{shift}_H4', 0.5)
-            h5_s = pattern_scores.get(f'{shift}_H5', 0.5)
+    for shift in shifts:
+        # केवल उन्हीं कॉलम्स को ब्लॉक करें जिनका बैकटेस्ट प्रेडिक्शन 0 (डैड) आया है और सटीकता 80% से ऊपर है
+        if registry_scores.get(f'{shift}_H1', {}).get('prediction') == 0: removed_numbers.update(range(1, 21))
+        if registry_scores.get(f'{shift}_H2', {}).get('prediction') == 0: removed_numbers.update(range(21, 41))
+        if registry_scores.get(f'{shift}_H3', {}).get('prediction') == 0: removed_numbers.update(range(41, 61))
+        if registry_scores.get(f'{shift}_H4', {}).get('prediction') == 0: removed_numbers.update(range(61, 81))
+        if registry_scores.get(f'{shift}_H5', {}).get('prediction') == 0:
+            removed_numbers.update(range(81, 100))
+            removed_numbers.add(0)
             
-            if 1 <= n <= 20: confidence *= (h1_s / 0.5)
-            elif 21 <= n <= 40: confidence *= (h2_s / 0.5)
-            elif 41 <= n <= 60: confidence *= (h3_s / 0.5)
-            elif 61 <= n <= 80: confidence *= (h4_s / 0.5)
-            elif (81 <= n <= 99) or n == 0: confidence *= (h5_s / 0.5)
-                
-            # वर्टिकल चेक (आखिरी अंक)
-            v1_s = pattern_scores.get(f'{shift}_V1', 0.5)
-            v2_s = pattern_scores.get(f'{shift}_V2', 0.5)
-            v3_s = pattern_scores.get(f'{shift}_V3', 0.5)
-            v4_s = pattern_scores.get(f'{shift}_V4', 0.5)
-            v5_s = pattern_scores.get(f'{shift}_V5', 0.5)
-            
-            if rem in [1, 2]: confidence *= (v1_s / 0.5)
-            elif rem in [3, 4]: confidence *= (v2_s / 0.5)
-            elif rem in [5, 6]: confidence *= (v3_s / 0.5)
-            elif rem in [7, 8]: confidence *= (v4_s / 0.5)
-            elif rem in [9, 0]: confidence *= (v5_s / 0.5)
-                
-        number_confidence[n] = confidence
+        for n in list(allowed_numbers):
+            rem = n % 10
+            if registry_scores.get(f'{shift}_V1', {}).get('prediction') == 0 and rem in [1, 2]: removed_numbers.add(n)
+            if registry_scores.get(f'{shift}_V2', {}).get('prediction') == 0 and rem in [3, 4]: removed_numbers.add(n)
+            if registry_scores.get(f'{shift}_V3', {}).get('prediction') == 0 and rem in [5, 6]: removed_numbers.add(n)
+            if registry_scores.get(f'{shift}_V4', {}).get('prediction') == 0 and rem in [7, 8]: removed_numbers.add(n)
+            if registry_scores.get(f'{shift}_V5', {}).get('prediction') == 0 and rem in [9, 0]: removed_numbers.add(n)
 
-    # टॉप स्कोर वाले नंबर छांटना जो कट-ऑफ पार करते हैं
-    sorted_numbers = sorted(number_confidence.items(), key=lambda x: x[1], reverse=True)
-    
-    # केवल वो नंबर जिनकी कॉन्फिडेंस वैल्यू सबसे ज्यादा है
-    top_numbers = [num for num, score in sorted_numbers[:18]] # केवल बेस्ट 18 सॉलिड अंक
-    return sorted(top_numbers)
+    final_prediction = allowed_numbers - removed_numbers
+    return sorted(list(final_prediction)), sorted(list(removed_numbers))
 
 # मोबाइल यूजर इंटरफेस
-st.subheader("📁 डेटा इनपुट (Data Input)")
+st.subheader("📁 डेटा इनपुट और लाइव बैकटेस्टिंग (Data Input & Live Backtest)")
 uploaded_file = st.file_uploader(
     "अपनी एक्सेल शीट (.xlsx या .csv) अपलोड करें", 
     type=["csv", "xlsx"],
-    key="maya_adaptive_booster_v4"
+    key="maya_backtest_booster_v5"
 )
 
 if uploaded_file is not None:
@@ -174,33 +197,32 @@ if uploaded_file is not None:
             df = pd.read_excel(uploaded_file)
             
         matrix_df, pattern_cols = process_binary_matrix(df)
-        scores, strong_p, dead_p = adaptive_learning_prediction(matrix_df, pattern_cols)
-        final_nums = generate_adaptive_numbers(scores)
+        registry, success_list, failed_cnt = deep_historical_backtest(matrix_df, pattern_cols)
+        final_nums, blocked_nums = generate_backtested_numbers(registry)
         
-        # परिणाम स्क्रीन (मोबाइल फ्रेंडली और स्पष्ट)
-        st.success("🎯 वास्तविक मजबूत ट्रेंड्स (High Probability Trends)")
-        if strong_p:
-            for k, v in list(strong_p.items())[:8]: # टॉप 8 मुख्य ट्रेंड दिखाना
-                st.write(f"🔹 **{k}**: {v}")
-        else:
-            st.write("कोई एकतरफा मजबूत ट्रेंड नहीं है, मार्केट संतुलित है।")
-                
-        st.error("🚫 वास्तविक डैड ट्रेंड्स (Low Probability Trends)")
-        if dead_p:
-            for k, v in list(dead_p.items())[:8]:
-                st.write(f"🔸 **{k}**: {v}")
-        else:
-            st.write("इतिहास में आज कोई ब्लॉक ट्रेंड सक्रिय नहीं है।")
-                
+        # परिणाम का प्रदर्शन
+        st.header("📊 लाइव बैकटेस्टिंग रिपोर्ट (Live Test Result)")
+        st.write(f"कुल 60 पैटर्न्स में से **{len(success_list)}** पैटर्न्स ने 80%-100% सफलता दर को पास किया। शेष **{failed_cnt}** को कमजोर मानकर हटा दिया गया।")
+        
+        if success_list:
+            with st.expander("पास हुए सफल पैटर्न्स और उनके इतिहास के संबंध देखें"):
+                for item in success_list:
+                    st.write(item)
+                    
         st.markdown("---")
-        st.subheader("🔮 MAYA AI - आज के फाइनल सॉलिड अंक")
-        st.write("क्रॉस-शिफ्ट डेंसिटी और पिछले इतिहास की गलतियों को सुधार कर निकाले गए **सर्वश्रेष्ठ अंक**:")
+        st.header("🔮 आज के 100% बैकटेस्ट पास सॉलिड अंक")
+        st.write("इतिहास की कड़ी कसौटी (80%-100% सक्सेस रेट) पर खरे उतरे फाइनल नंबर्स:")
         
         if final_nums:
-            st.markdown(f"### 👑 `{', '.join(map(str, final_nums))}`")
-            st.write(f"कुल सुरक्षित अंकों की संख्या: **{len(final_nums)}**")
+            st.markdown(f"## 👑 `{', '.join(map(str, final_nums))}`")
+            st.write(f"कुल बचे हुए सॉलिड अंकों की संख्या: **{len(final_nums)}**")
         else:
-            st.write("डेटा अपर्याप्त है या अत्यधिक टकराव है।")
+            st.warning("इतिहास के कड़े फिल्टरों के कारण आज कोई भी सुरक्षित नंबर पास नहीं हो सका। मार्केट बहुत अनिश्चित है।")
+            
+        # तारीख के साथ कनवर्टेड शीट देखने का विकल्प
+        if st.checkbox("पूरी कनवर्टेड बाइनरी शीट (तारीख और सीरियल नंबर के साथ) देखें"):
+            st.write("आप नीचे स्क्रॉल करके किसी भी तारीख की प्रेडिक्शन और कोड्स खुद चेक कर सकते हैं:")
+            st.dataframe(matrix_df[['S. NUMBER ', 'DATE'] + pattern_cols])
             
     except Exception as e:
         st.error(f"फाइल प्रोसेसिंग एरर: {e}")
